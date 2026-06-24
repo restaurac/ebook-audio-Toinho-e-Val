@@ -1,0 +1,6 @@
+{
+  "name": "Toinho, Amigo Leal e Sabedoria de Val",
+  "description": "E-book digital interativo profissional expandido de Toinho e Val com narração por voz inteligente (TTS) de alta qualidade, diagramação impecável e ficha de catalogação brasileira.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Ocultar elementos interativos */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Forçar quebras de página para cada folha do e-book e evitar alturas em excesso usando milímetros exatos */
+  .print-page-break {
+    page-break-after: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    box-sizing: border-box !important;
+    padding: 22mm !important; /* Espaço interno limpo e seguro para margem de impressão */
+    margin: 0 !important;
+    border: none !important;
+    background: white !important;
+    overflow: hidden !important; /* Estritamente impede quebras silenciosas por pixels ocultos ou vazamentos */
+  }
+
+  .print-page-break:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Garantir cores pretas em fundo branco na impressão e anular bloqueios de altura e rolagem */
+  html, body, #root, #root > div, #ebook_app {
+    background: white !important;
+    color: #1c1917 !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Forcar impressao de imagens em cores reais e com tamanho restrito perfeito em milímetros */
+  img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-height: 85mm !important;
+    object-fit: contain !important;
+  }
+
+  /* Manter as cores do bloco estéticas de copyright do autor */
+  .print-border-yellow {
+    border-color: #d4af37 !important;
+    background-color: #fafaf9 !important;
+    color: #1c1917 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
