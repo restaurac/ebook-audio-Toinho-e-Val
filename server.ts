@@ -86,6 +86,9 @@ app.post("/api/tts", async (req, res) => {
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
+  // Servir a pasta de áudios diretamente do public/audio em produção e desenvolvimento
+  app.use("/audio", express.static(path.join(process.cwd(), "public", "audio")));
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
