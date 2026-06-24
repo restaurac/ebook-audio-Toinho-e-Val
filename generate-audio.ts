@@ -21,28 +21,42 @@ const ai = new GoogleGenAI({
   },
 });
 
-function createWavBuffer(pcmBuffer: Buffer, sampleRate: number = 24000): Buffer {
-  const header = Buffer.alloc(44);
-  const blockAlign = 2; // 1 channel * 16-bit (2 bytes)
-  const byteRate = sampleRate * blockAlign;
-  const dataLength = pcmBuffer.length;
-  const fileLength = dataLength + 36;
+// Define globals for lamejs to prevent strict-mode ReferenceError in Node ESM
+const g = global as any;
+g.MPEGMode = {};
+g.Lame = {};
+g.BitStream = {};
+g.Dither = {};
+g.Header = {};
+g.Version = {};
+g.Presets = {};
+g.ParameterHolder = {};
+g.VbrMode = {};
+g.ShortBlock = {};
+g.QuantizePVT = {};
+g.Takehiro = {};
+g.JVBRPicture = {};
+g.ScaleFac = {};
+g.Encoder = {};
+g.III_psy_ratio = {};
+g.III_psy_const = {};
+g.PsyModel = {};
+g.VBRQueue = {};
+g.VbrPVT = {};
+g.Plot = {};
+g.Tables = {};
 
-  header.write("RIFF", 0);
-  header.writeUInt32LE(fileLength, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(16, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(dataLength, 40);
+let lamejsInstance: any = null;
 
-  return Buffer.concat([header, pcmBuffer]);
+function getLamejs() {
+  if (!lamejsInstance) {
+    const lamejsPath = path.join(process.cwd(), "node_modules", "lamejs", "lame.all.js");
+    const code = fs.readFileSync(lamejsPath, "utf8");
+    // Wrap and evaluate in non-strict mode to resolve LAME globals
+    const fn = new Function("global", code + "\nreturn lamejs;");
+    lamejsInstance = fn(global);
+  }
+  return lamejsInstance;
 }
 
 async function sleep(ms: number) {
@@ -53,10 +67,30 @@ async function generatePageWithRetry(page: any, outputDir: string, attempt: numb
   const filename = `pagina${page.id}.mp3`;
   const outputPath = path.join(outputDir, filename);
 
-  // Skip if already generated (prevents wasting low daily quota limits)
-  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
-    console.log(`[Página ${page.id}] Áudio premium já existe em ${filename}. Pulando...`);
+  // Check if existing file is actually a WAV file (starts with "RIFF")
+  let isWav = false;
+  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 4) {
+    try {
+      const fd = fs.openSync(outputPath, "r");
+      const buffer = Buffer.alloc(4);
+      fs.readSync(fd, buffer, 0, 4, 0);
+      fs.closeSync(fd);
+      if (buffer.toString("utf8") === "RIFF") {
+        isWav = true;
+      }
+    } catch (err) {
+      console.warn(`[Página ${page.id}] Falha ao verificar formato do arquivo existente:`, err);
+    }
+  }
+
+  // Skip only if it's already generated and is a REAL MP3 (not a WAV)
+  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000 && !isWav) {
+    console.log(`[Página ${page.id}] Áudio premium MP3 real já existe em ${filename}. Pulando...`);
     return true;
+  }
+
+  if (isWav) {
+    console.log(`[Página ${page.id}] Arquivo anterior em formato WAV (fake MP3) detectado. Forçando regeração como MP3 real...`);
   }
 
   let textToRead = "";
@@ -92,10 +126,30 @@ async function generatePageWithRetry(page: any, outputDir: string, attempt: numb
     }
 
     const pcmBuffer = Buffer.from(base64Audio, "base64");
-    const wavBuffer = createWavBuffer(pcmBuffer, 24000);
+    
+    // Encode the raw 16-bit mono 24kHz PCM buffer into standard MP3 using lamejs
+    const lj = getLamejs();
+    const mp3encoder = new lj.Mp3Encoder(1, 24000, 128); // 1 channel (mono), 24000Hz, 128kbps
+    const samples = new Int16Array(
+      pcmBuffer.buffer,
+      pcmBuffer.byteOffset,
+      pcmBuffer.length / 2
+    );
 
-    fs.writeFileSync(outputPath, wavBuffer);
-    console.log(`[Página ${page.id}] Áudio premium gerado com sucesso: ${filename} (${wavBuffer.length} bytes)`);
+    const mp3Data: Buffer[] = [];
+    const mp3Tmp = mp3encoder.encodeBuffer(samples);
+    if (mp3Tmp.length > 0) {
+      mp3Data.push(Buffer.from(mp3Tmp));
+    }
+    const mp3Flush = mp3encoder.flush();
+    if (mp3Flush.length > 0) {
+      mp3Data.push(Buffer.from(mp3Flush));
+    }
+
+    const mp3Buffer = Buffer.concat(mp3Data);
+
+    fs.writeFileSync(outputPath, mp3Buffer);
+    console.log(`[Página ${page.id}] Áudio premium MP3 real gerado com sucesso: ${filename} (${mp3Buffer.length} bytes)`);
     return true;
   } catch (error: any) {
     const errorString = JSON.stringify(error) || error.message || "";
