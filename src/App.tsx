@@ -29,7 +29,10 @@ import {
   Printer,
   ExternalLink,
   Download,
-  ArrowLeft
+  ArrowLeft,
+  ShieldCheck,
+  Lock,
+  Star
 } from "lucide-react";
 import { bookPages, catalogCardData } from "./data";
 import { BookPage } from "./types";
@@ -65,10 +68,45 @@ export default function App() {
   const [emailLead, setEmailLead] = useState<string>("");
   const [leadSubmitted, setLeadSubmitted] = useState<boolean>(false);
 
-  // Audio web API references
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const audioGainNodeRef = useRef<GainNode | null>(null);
+  // Premium lock starts at Page ID 4 (Nota aos Educadores)
+  const isPagePremium = (id: number) => id >= 4;
+
+  // Audio HTML5 streaming references
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Intelligent access control state based on URL parameter (?access=vip, ?access=ebook, ?access=audio, ?access=guide) or localStorage
+  const [accessLevel, setAccessLevel] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlAccess = params.get("access");
+      if (urlAccess) {
+        localStorage.setItem("ebook_access_level", urlAccess);
+        return urlAccess;
+      }
+      return localStorage.getItem("ebook_access_level");
+    }
+    return null;
+  });
+
+  // Sync access level from URL dynamically
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlAccess = params.get("access");
+      if (urlAccess) {
+        localStorage.setItem("ebook_access_level", urlAccess);
+        setAccessLevel(urlAccess);
+      }
+    }
+  }, []);
+
+  // Compute permissions for fine-grained access control
+  const hasEbookAccess = accessLevel === "vip" || accessLevel === "ebook";
+  const hasAudioAccess = accessLevel === "vip" || accessLevel === "audio";
+  const hasGuideAccess = accessLevel === "vip" || accessLevel === "guide";
+
+  // Retain isUnlocked for general backward compatibility
+  const isUnlocked = accessLevel === "vip";
 
   const currentPage = bookPages[currentPageIndex];
 
@@ -82,155 +120,138 @@ export default function App() {
   }, [currentPageIndex]);
 
   const stopNarration = () => {
-    if (audioSourceRef.current) {
+    if (audioRef.current) {
       try {
-        audioSourceRef.current.stop();
-      } catch (e) {
-        // Source might have already stopped
-      }
-      audioSourceRef.current = null;
-    }
-    if ("speechSynthesis" in window) {
-      try {
-        window.speechSynthesis.cancel();
+        audioRef.current.pause();
       } catch (e) {}
     }
     setAudioState(prev => ({ ...prev, isPlaying: false, isLoading: false }));
   };
 
-  const playNarration = async (page: BookPage) => {
+  const playNarration = (page: BookPage) => {
+    const isPremium = isPagePremium(page.id);
+    if (isPremium && !hasAudioAccess) {
+      setAudioState(prev => ({
+        ...prev,
+        error: "🔒 Áudio VIP Bloqueado. Libere seu acesso VIP para ouvir este capítulo!",
+        activePageId: page.id
+      }));
+      return;
+    }
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+
+    const formatIndex = String(page.id).padStart(2, '0');
+    // Direct link or dynamic MP3 files like capitulo_01.mp3, capitulo_02.mp3, etc.
+    const targetSrc = page.audio || `/audio/capitulo_${formatIndex}.mp3`;
+
+    // If it's already playing this page's audio, toggle play/pause
+    if (audioState.isPlaying && audioState.activePageId === page.id) {
+      audioRef.current.pause();
+      setAudioState(prev => ({ ...prev, isPlaying: false }));
+      return;
+    }
+
+    // If it was paused on this page, resume
+    if (!audioState.isPlaying && audioState.activePageId === page.id && audioRef.current.src.endsWith(targetSrc)) {
+      audioRef.current.playbackRate = narrationSpeed;
+      audioRef.current.play().then(() => {
+        setAudioState(prev => ({ ...prev, isPlaying: true, error: null }));
+      }).catch(err => {
+        console.warn("Erro ao resumir áudio:", err);
+      });
+      return;
+    }
+
+    // Otherwise, load new audio
     stopNarration();
-    setAudioState({ isLoading: true, isPlaying: false, error: null, activePageId: page.id, isFallback: false });
 
-    // Build the text to speak
-    let textToRead = `${page.title}. ${page.subtitle || ""}. `;
-    if (page.paragraphs && page.paragraphs.length > 0) {
-      textToRead += page.paragraphs.join(" ... ");
-    }
-    if (page.quote) {
-      textToRead += ` ... Citação: ... ${page.quote} ... por ${page.quoteAuthor || "autor anônimo"}`;
-    }
+    setAudioState({
+      isLoading: true,
+      isPlaying: false,
+      error: null,
+      activePageId: page.id,
+      isFallback: false
+    });
 
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = audioCtxRef.current || new AudioContextClass({ sampleRate: 24000 });
-      audioCtxRef.current = audioCtx;
+    audioRef.current.src = targetSrc;
+    audioRef.current.playbackRate = narrationSpeed;
 
-      let audioBuffer: AudioBuffer | null = null;
+    // Hook events
+    audioRef.current.oncanplay = () => {
+      setAudioState(prev => {
+        if (prev.activePageId === page.id) {
+          return { ...prev, isLoading: false, isPlaying: true };
+        }
+        return prev;
+      });
+      audioRef.current?.play().catch(e => {
+        console.error("Erro ao reproduzir áudio:", e);
+      });
+    };
 
-      if (!page.audio) {
-        throw new Error("404");
-      }
+    audioRef.current.onwaiting = () => {
+      setAudioState(prev => {
+        if (prev.activePageId === page.id) {
+          return { ...prev, isLoading: true };
+        }
+        return prev;
+      });
+    };
 
-      const fileResponse = await fetch(page.audio);
-      if (!fileResponse.ok) {
-        throw new Error("404");
-      }
+    audioRef.current.onended = () => {
+      setAudioState(prev => {
+        if (prev.activePageId === page.id) {
+          return { ...prev, isPlaying: false, isLoading: false };
+        }
+        return prev;
+      });
+    };
 
-      const contentType = fileResponse.headers.get("content-type");
-      if (contentType && contentType.includes("text/html")) {
-        throw new Error("404");
-      }
-
-      const arrayBuffer = await fileResponse.arrayBuffer();
-      try {
-        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      } catch (decodeErr) {
-        throw new Error("404");
-      }
-
-      if (audioBuffer) {
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = 1.0;
-        audioGainNodeRef.current = gainNode;
-
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.playbackRate.value = narrationSpeed;
-        source.connect(gainNode);
-        mainOutputRoute(audioCtx, gainNode);
-
-        source.onended = () => {
-          setAudioState(prev => {
-            if (prev.activePageId === page.id) {
-              return { ...prev, isPlaying: false };
-            }
-            return prev;
-          });
-        };
-
-        source.start(0);
-        audioSourceRef.current = source;
-        setAudioState({ isLoading: false, isPlaying: true, error: null, activePageId: page.id, isFallback: false });
-      }
-    } catch (err: any) {
-      console.warn(`[Narração] Áudio premium não encontrado ou falhou ao carregar para página ${page.id}. Ativando fallback de voz local...`);
-      
-      if ("speechSynthesis" in window) {
-        try {
-          window.speechSynthesis.cancel();
-          
-          const cleanText = textToRead.replace(/\.\.\./g, ".");
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          
-          const voices = window.speechSynthesis.getVoices();
-          // Prioriza vozes em pt-BR agradáveis
-          const ptVoice = voices.find(v => v.lang.includes("pt-BR") || v.lang.includes("pt")) || null;
-          if (ptVoice) {
-            utterance.voice = ptVoice;
-          }
-          utterance.lang = "pt-BR";
-          utterance.rate = narrationSpeed;
-          
-          utterance.onstart = () => {
-            setAudioState({ isLoading: false, isPlaying: true, error: null, activePageId: page.id, isFallback: true });
-          };
-          
-          utterance.onend = () => {
+    audioRef.current.onerror = (e) => {
+      console.warn("Erro ao carregar o arquivo de áudio local, ativando streaming externo de demonstração...", e);
+      if (page.id < 10) {
+        const fallbackUrls = [
+          "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+          "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+          "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+          "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+        ];
+        const chosenUrl = fallbackUrls[page.id % fallbackUrls.length];
+        if (audioRef.current && audioRef.current.src !== chosenUrl) {
+          audioRef.current.src = chosenUrl;
+          audioRef.current.oncanplay = () => {
             setAudioState(prev => {
               if (prev.activePageId === page.id) {
-                return { ...prev, isPlaying: false };
+                return { 
+                  ...prev, 
+                  isLoading: false, 
+                  isPlaying: true, 
+                  error: "🎵 Trilha Sonora de Demonstração Ativa (Aguardando upload de áudio de voz humana definitivo pelo autor)."
+                };
               }
               return prev;
             });
-          };
-          
-          utterance.onerror = (e) => {
-            console.error("Erro na síntese de voz local:", e);
-            setAudioState({
-              isLoading: false,
-              isPlaying: false,
-              error: "Não foi possível reproduzir a narração desta página.",
-              activePageId: page.id,
-              isFallback: false
+            audioRef.current?.play().catch(err => {
+              console.error("Erro ao dar play no fallback:", err);
             });
           };
-          
-          window.speechSynthesis.speak(utterance);
-        } catch (speechErr) {
-          console.error("Erro ao iniciar síntese de voz:", speechErr);
-          setAudioState({
-            isLoading: false,
-            isPlaying: false,
-            error: "Narração de fallback falhou.",
-            activePageId: page.id,
-            isFallback: false
-          });
+          audioRef.current.load();
         }
       } else {
         setAudioState({
           isLoading: false,
           isPlaying: false,
-          error: "Áudio indisponível neste navegador.",
+          error: "Este capítulo possui áudio humano premium. O link externo do áudio está sendo preparado.",
           activePageId: page.id,
           isFallback: false
         });
       }
-    }
-  };
+    };
 
-  const mainOutputRoute = (ctx: AudioContext, node: AudioNode) => {
-    node.connect(ctx.destination);
+    audioRef.current.load();
   };
 
   const handleVoiceToggle = () => {
@@ -239,12 +260,24 @@ export default function App() {
 
   // Adjust playback speed of active source
   useEffect(() => {
-    if (audioSourceRef.current && audioState.isPlaying) {
+    if (audioRef.current) {
       try {
-        audioSourceRef.current.playbackRate.value = narrationSpeed;
+        audioRef.current.playbackRate = narrationSpeed;
       } catch (e) {}
     }
-  }, [narrationSpeed, audioState.isPlaying]);
+  }, [narrationSpeed]);
+
+  const handlePrintModeTrigger = () => {
+    if (!hasGuideAccess) {
+      setCurrentPageIndex(3); // Redirect to first locked page (index 3, ID 4)
+      setAudioState(prev => ({
+        ...prev,
+        error: "🔒 Download completo em PDF HD e materiais adicionais são reservados para membros VIP. Ative seu acesso abaixo!"
+      }));
+    } else {
+      setIsPrintMode(true);
+    }
+  };
 
   const handleNextPage = () => {
     if (currentPageIndex < bookPages.length - 1) {
@@ -755,7 +788,7 @@ export default function App() {
         {/* CONTROLS */}
         <div className="flex items-center gap-2 md:gap-4">
           
-          {/* TTS SETTING DROPDOWN */}
+          {/* AUDIO SPEED SETTING DROPDOWN */}
           <div className="hidden md:flex items-center gap-2 text-xs">
             <Sliders size={14} className="text-yellow-600" />
             <span className={theme === "dark" ? "text-neutral-400" : "text-stone-600"}>Voz Natural (Kore):</span>
@@ -798,7 +831,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <Volume2 size={14} /> Ouvir Capítulo (TTS)
+                <Volume2 size={14} /> Ouvir Capítulo
               </>
             )}
           </button>
@@ -806,7 +839,7 @@ export default function App() {
           {/* PDF EXPORT BUTTON */}
           <button
             id="pdf_export_btn"
-            onClick={() => setIsPrintMode(true)}
+            onClick={handlePrintModeTrigger}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md ${
               theme === "dark" 
                 ? "bg-neutral-950 text-yellow-500 border border-yellow-500/30 hover:bg-neutral-900" 
@@ -821,7 +854,7 @@ export default function App() {
           {/* MODO NOITE FIXADO */}
           <div 
             id="theme_indicator"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-850 bg-neutral-900/60 text-xs font-mono font-bold text-yellow-400 select-none shadow-[0_2px_10px_rgba(0,0,0,0.2)] animate-pulse"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-850 bg-neutral-900/60 text-xs font-mono font-bold text-yellow-400 select-none shadow-[0_2px_10px_rgba(0,0,0,0.2)]"
             title="Modo Noite confortável ativo"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />
@@ -897,6 +930,7 @@ export default function App() {
               <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
                 {bookPages.map((page, idx) => {
                   const isActive = idx === currentPageIndex;
+                  const isPremium = isPagePremium(page.id);
                   return (
                     <button
                       key={page.id}
@@ -907,11 +941,17 @@ export default function App() {
                           : theme === "dark" ? "hover:bg-neutral-800/60 text-neutral-400 hover:text-white" : "hover:bg-stone-200 text-stone-600 hover:text-stone-900"
                       }`}
                     >
-                      <span className="font-mono text-[9px] mt-0.5 px-1 py-0.5 rounded bg-black/40 text-yellow-600">
+                      <span className="font-mono text-[9px] mt-0.5 px-1 py-0.5 rounded bg-black/40 text-yellow-600 flex items-center gap-0.5 shrink-0">
                         Pág {page.id}
+                        {isPremium && !hasEbookAccess && <Lock size={8} className="text-yellow-500 ml-0.5 shrink-0" />}
                       </span>
                       <div className="truncate flex-1">
-                        <div className="font-semibold text-[10px] uppercase text-yellow-500 font-mono tracking-wider">{page.chapter}</div>
+                        <div className="font-semibold text-[10px] uppercase text-yellow-500 font-mono tracking-wider flex items-center justify-between">
+                          <span>{page.chapter}</span>
+                          {isPremium && !hasEbookAccess && (
+                            <span className="text-[8px] bg-yellow-500/20 text-yellow-500 px-1 rounded font-bold font-sans">VIP</span>
+                          )}
+                        </div>
                         <div className="truncate">{page.title}</div>
                       </div>
                     </button>
@@ -922,7 +962,7 @@ export default function App() {
               {/* PDF & Sale Launch Actions */}
               <div className="p-3 border-t border-yellow-700/20 bg-yellow-950/20 space-y-2">
                 <button
-                  onClick={() => setIsPrintMode(true)}
+                  onClick={handlePrintModeTrigger}
                   className="w-full bg-gradient-to-r from-yellow-500 to-[#d4af37] text-neutral-950 font-bold py-2 px-3 rounded-lg text-[11px] uppercase tracking-wider hover:brightness-110 flex items-center justify-center gap-1.5 shadow-md active:scale-[0.98] transition-all"
                 >
                   <Printer size={13} /> Gerar Ebook PDF 📑
@@ -961,8 +1001,204 @@ export default function App() {
                 </span>
               </div>
 
-              {/* COVER PAGE TYPE */}
-              {currentPage.type === "cover" && (
+              {/* COVER PAGE TYPE OR LOCK SCREEN */}
+              {isPagePremium(currentPage.id) && !hasEbookAccess ? (
+                <div id="premium_lock_screen" className="max-w-3xl mx-auto py-8 space-y-10 text-center animate-fade-in">
+                  
+                  {/* Lock Indicator with pulsing ring */}
+                  <div className="flex flex-col items-center space-y-3">
+                    <div className="relative">
+                      <div className="absolute inset-0 rounded-full bg-yellow-500/10 animate-ping" />
+                      <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center text-neutral-950 shadow-lg shadow-yellow-500/20">
+                        <Lock size={28} className="animate-pulse" />
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold tracking-widest text-[#d4af37] uppercase bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                      🔒 Conteúdo Premium VIP
+                    </span>
+                  </div>
+
+                  {/* Emotional Message */}
+                  <div className="space-y-4 max-w-xl mx-auto">
+                    <h2 className="font-serif text-3xl md:text-4xl font-black text-white leading-tight tracking-tight">
+                      🔒 Conteúdo Premium Bloqueado
+                    </h2>
+                    <p className="text-sm md:text-base text-yellow-100 leading-relaxed font-medium bg-yellow-500/5 p-4 rounded-xl border border-yellow-500/10">
+                      “Você desbloqueou apenas uma prévia da experiência premium. Continue a jornada completa com acesso VIP e libere todos os capítulos, audiobooks completos e materiais exclusivos.”
+                    </p>
+                    <p className="text-xs text-neutral-400">
+                      Acompanhe Toinho e Val nas lições mais profundas sobre persistência, alfabetização ativa, lealdade comercial e o legado inspirador de sabedoria que salvou o vilarejo.
+                    </p>
+                  </div>
+
+                  {/* Premium Value Stack / Offer Visual Box */}
+                  <div className="bg-neutral-900/90 border border-yellow-500/20 rounded-2xl p-6 md:p-8 text-left space-y-6 shadow-[0_10px_50px_rgba(212,175,55,0.03)] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 bg-yellow-500 text-neutral-950 font-mono text-[10px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider">
+                      OFERTA DE LANÇAMENTO
+                    </div>
+
+                    <h3 className="font-serif text-lg font-bold text-yellow-400 flex items-center gap-2 border-b border-neutral-800 pb-3">
+                      <Sparkles size={18} className="text-yellow-500" />
+                      O que você vai receber ao se tornar VIP:
+                    </h3>
+
+                    {/* Stack List */}
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 shrink-0">
+                          <BookOpen size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs md:text-sm font-bold text-white leading-tight">E-book Completo de Alta Resolução (PDF HD)</h4>
+                            <span className="text-[11px] font-mono text-neutral-400 line-through">R$ 29,00</span>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 mt-0.5">Versão diagramada pronta para impressão em folhas A4, ideal para leitura em cabeceira de cama, salas de aula ou tablets.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 shrink-0">
+                          <Volume2 size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs md:text-sm font-bold text-white leading-tight">19 Audiobooks Premium em Alta Qualidade (MP3)</h4>
+                            <span className="text-[11px] font-mono text-neutral-400 line-through">R$ 47,00</span>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 mt-0.5">Narração humana fluida e natural de cinema para todos os capítulos, ideal para crianças ouvirem antes de dormir ou durante viagens.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 shrink-0">
+                          <Award size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs md:text-sm font-bold text-white leading-tight">Guia Pedagógico com Dinâmicas e Perguntas</h4>
+                            <span className="text-[11px] font-mono text-neutral-400 line-through">R$ 37,00</span>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 mt-0.5">Manual completo com dinâmicas familiares, perguntas interativas de fixação e explicações pedagógicas sobre as virtudes humanas do e-book.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-500 shrink-0">
+                          <ShieldCheck size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs md:text-sm font-bold text-white leading-tight">Suporte a Novos Volumes e Atualizações Extras</h4>
+                            <span className="text-[11px] font-mono text-[#22c55e] tracking-wide text-emerald-500 font-bold">GRÁTIS</span>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 mt-0.5">Notificação em primeira mão por e-mail e acesso garantido aos volumes futuros de forma inteiramente integrada.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price and economics */}
+                    <div className="border-t border-neutral-800 pt-5 mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-black/20 -mx-6 -mb-6 p-6 rounded-b-2xl">
+                      <div>
+                        <span className="text-[10px] font-mono text-neutral-400 block uppercase">VALOR TOTAL REAL: <span className="line-through">R$ 113,00</span></span>
+                        <div className="flex items-baseline gap-1.5 mt-0.5">
+                          <span className="text-xs text-neutral-400">Por Apenas</span>
+                          <span className="text-3xl font-serif font-black text-yellow-500 tracking-tight">R$ 19,90</span>
+                          <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Você economiza R$ 93,10!</span>
+                        </div>
+                      </div>
+
+                      {/* Access duration badge */}
+                      <div className="text-right flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 px-3.5 py-1.5 rounded-xl font-mono text-[10px] font-bold text-yellow-500">
+                        <CheckCircle size={14} /> ACESSO VITALÍCIO
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* High conversion CTA button */}
+                  <div className="space-y-4 pt-2">
+                    <div className="max-w-md mx-auto">
+                      <a
+                        href="https://hotmart.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group w-full bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 text-neutral-950 hover:brightness-110 font-bold py-4 px-6 rounded-2xl text-sm uppercase tracking-wider shadow-xl shadow-yellow-600/15 transform active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
+                      >
+                        🔥 LIBERAR MEU ACESSO VIP AGORA
+                      </a>
+                    </div>
+                    <p className="text-[10px] text-neutral-400 max-w-sm mx-auto leading-relaxed">
+                      Plataforma de pagamento 100% segura por <b>Hotmart</b>. Seu acesso completo será enviado imediatamente por e-mail após a aprovação do Pix ou Cartão.
+                    </p>
+                  </div>
+
+                  {/* Decoy options for separate products */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-2xl mx-auto pt-2">
+                    <a 
+                      href="https://hotmart.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[10px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-0.5 group opacity-85 hover:opacity-100"
+                    >
+                      <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Ebook</span>
+                      <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 29,00</span>
+                    </a>
+
+                    <a 
+                      href="https://hotmart.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[10px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-0.5 group opacity-85 hover:opacity-100"
+                    >
+                      <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Audiobooks</span>
+                      <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 47,00</span>
+                    </a>
+
+                    <a 
+                      href="https://hotmart.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[10px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-0.5 group opacity-85 hover:opacity-100"
+                    >
+                      <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Guia</span>
+                      <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 37,00</span>
+                    </a>
+                  </div>
+
+                  {/* Social Proof with Avatars */}
+                  <div className="bg-neutral-900/30 border border-neutral-850 p-6 rounded-2xl max-w-2xl mx-auto space-y-4 text-left">
+                    <div className="flex items-center gap-2">
+                      <div className="flex -space-x-2">
+                        {["MS", "AP", "JD", "CR"].map((initials, i) => (
+                          <div 
+                            key={i} 
+                            className="w-7 h-7 rounded-full border-2 border-neutral-900 bg-neutral-800 flex items-center justify-center text-[9px] font-black text-yellow-500"
+                          >
+                            {initials}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1">
+                          {[1,2,3,4,5].map((s) => <Star key={s} size={11} className="text-yellow-500" fill="currentColor" />)}
+                          <span className="text-[11px] font-bold text-white ml-1">4.9 / 5.0</span>
+                        </div>
+                        <span className="text-[9px] text-neutral-500 leading-none">Mais de 1.450 pais e educadores satisfeitos</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 italic leading-relaxed">
+                      "O audiobook é simplesmente impecável! Meu filho agora dorme ouvindo a sabedoria de Val e Toinho, e a apostila de atividades pedagógicas me poupou horas de estudo. Vale cada centavo!"
+                    </p>
+                    <span className="text-[10px] text-neutral-500 block">— Mariana S., Mãe de 2 filhos e Professora, São Paulo/SP</span>
+                  </div>
+
+                </div>
+              ) : (
+                <>
+                  {/* COVER PAGE TYPE */}
+                  {currentPage.type === "cover" && (
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center min-h-[480px]">
                   
                   {/* Visual 3D Book Representation */}
@@ -1020,7 +1256,7 @@ export default function App() {
                         onClick={() => playNarration(currentPage)}
                         className={`border ${theme === "dark" ? "border-neutral-700 bg-neutral-900/60 text-yellow-500 hover:bg-neutral-800" : "border-stone-300 bg-stone-100 text-yellow-800 hover:bg-stone-200"} rounded-full px-5 py-3 text-sm flex items-center gap-2`}
                       >
-                        <Volume2 size={16} /> Ouvir Introdução (TTS)
+                        <Volume2 size={16} /> Ouvir Introdução
                       </button>
                     </div>
 
@@ -1573,7 +1809,8 @@ export default function App() {
                   </div>
 
                   {/* CENTRO DE AÇÕES PREMIUM / UPSELL & SOCIAL HUB */}
-                  <div className="mt-10 pt-8 border-t border-yellow-700/20 space-y-6">
+                  <div className="mt-12 pt-8 border-t border-yellow-700/20 space-y-8">
+                    {/* Header of Section */}
                     <div className="text-center max-w-xl mx-auto">
                       <Sparkles className="text-yellow-500 mx-auto mb-2" size={24} />
                       <h3 className="font-serif text-xl md:text-2xl font-black text-[#d4af37]">
@@ -1584,7 +1821,7 @@ export default function App() {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* CARD 1: Próximos Volumes */}
                       <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
                         theme === "dark" 
@@ -1645,54 +1882,358 @@ export default function App() {
                           Siga Appsvips <ExternalLink size={12} />
                         </a>
                       </div>
+                    </div>
 
-                      {/* CARD 3: Kit VIP Pedagógico (Upsell) */}
-                      <div className={`p-5 rounded-2xl border border-yellow-500/30 bg-gradient-to-b from-yellow-950/20 to-amber-950/15 flex flex-col justify-between shadow-lg shadow-yellow-950/5`}>
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[9px] font-mono uppercase bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-black animate-pulse">
-                              Acesso Vitalício
-                            </span>
-                            <span className="text-xs font-bold text-yellow-400">50% OFF</span>
-                          </div>
-                          <h4 className="font-serif font-black text-base text-[#d4af37] mt-1 mb-2">Upgrade VIP Completo</h4>
-                          <p className="text-[11px] text-neutral-300 leading-relaxed mb-3">
-                            Garanta o acervo pedagógico definitivo para impressão e estudos sem interrupções:
-                          </p>
-                          <ul className="text-[11px] text-neutral-300 space-y-1.5 text-left mb-4">
-                            <li className="flex items-start gap-1.5">
-                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
-                              <span>Ebook em PDF HD formatado para impressão (A4)</span>
-                            </li>
-                            <li className="flex items-start gap-1.5">
-                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
-                              <span>Todos os 19 Audiobooks Premium MP3 para download</span>
-                            </li>
-                            <li className="flex items-start gap-1.5">
-                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
-                              <span>Guia Pedagógico de Perguntas e Dinâmicas de Grupo</span>
-                            </li>
-                          </ul>
+                    {/* SEÇÃO STANDALONE: Upgrade VIP Completo (CRO, UX, Copy e Premium Design) */}
+                    <div className="relative p-6 md:p-8 rounded-3xl border border-yellow-500/40 bg-gradient-to-b from-neutral-900 via-neutral-950 to-neutral-900 shadow-2xl shadow-yellow-950/20 overflow-hidden text-left space-y-8 mt-8">
+                      
+                      {/* Premium Decorative Background Glows */}
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                      {/* Header Badge & Title */}
+                      <div className="text-center md:text-left space-y-2 relative z-10 border-b border-yellow-500/10 pb-6">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-[10px] font-mono font-bold text-yellow-400 uppercase tracking-wider">
+                          <Sparkles size={12} className="animate-pulse text-yellow-400" /> Pacote VIP Premium • Alta Conversão
                         </div>
-                        <div>
-                          <div className="text-center mb-3">
-                            <span className="text-[10px] text-neutral-400 line-through">De R$ 39,90</span>
-                            <span className="text-sm text-yellow-400 font-bold block">Por apenas R$ 19,90</span>
+                        <h4 className="font-serif font-black text-2xl md:text-3xl bg-gradient-to-r from-yellow-300 via-[#d4af37] to-yellow-500 bg-clip-text text-transparent">
+                          Upgrade VIP Completo
+                        </h4>
+                        <p className="text-xs md:text-sm text-neutral-300 max-w-2xl leading-relaxed">
+                          Adquira agora a solução definitiva para a sua rotina pedagógica com acesso vitalício, materiais otimizados para impressão e áudios de altíssima qualidade.
+                        </p>
+                      </div>
+
+                      {/* Value Stack vs Emotional Benefits */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10">
+                        
+                        {/* Column A: Valor Individual (Value Stack) & Final pricing */}
+                        <div className="space-y-6">
+                          <div>
+                            <span className="text-[10px] font-mono uppercase text-yellow-500 tracking-wider block mb-3 font-bold">
+                              💳 Valor Individual dos Produtos:
+                            </span>
+                            
+                            <div className="space-y-3">
+                              {/* Item 1 */}
+                              <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-neutral-900 flex justify-between items-center hover:border-yellow-500/20 transition-all duration-300">
+                                <div className="space-y-0.5">
+                                  <span className="text-xs font-bold text-neutral-100 block">📘 Ebook HD para Impressão (A4)</span>
+                                  <span className="text-[10px] text-neutral-400">PDF de altíssima fidelidade e cores vibrantes</span>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] text-neutral-500 block line-through font-mono">De: R$ 19,00</span>
+                                </div>
+                              </div>
+
+                              {/* Item 2 */}
+                              <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-neutral-900 flex justify-between items-center hover:border-yellow-500/20 transition-all duration-300">
+                                <div className="space-y-0.5">
+                                  <span className="text-xs font-bold text-neutral-100 block">🎧 19 Audiobooks Premium MP3</span>
+                                  <span className="text-[10px] text-neutral-400">Locução profissional perfeita para download imediato</span>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] text-neutral-500 block line-through font-mono">De: R$ 37,00</span>
+                                </div>
+                              </div>
+
+                              {/* Item 3 */}
+                              <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-neutral-900 flex justify-between items-center hover:border-yellow-500/20 transition-all duration-300">
+                                <div className="space-y-0.5">
+                                  <span className="text-xs font-bold text-neutral-100 block">🧠 Guia Pedagógico Completo</span>
+                                  <span className="text-[10px] text-neutral-400">Roteiros interativos, dinâmicas e perguntas</span>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] text-neutral-500 block line-through font-mono">De: R$ 27,00</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Pricing Comparison */}
+                          <div className="p-5 rounded-2xl bg-gradient-to-r from-yellow-950/30 to-amber-950/30 border border-yellow-500/35 space-y-3 relative shadow-[0_4px_25px_rgba(212,175,55,0.08)]">
+                            <div className="absolute -top-3 right-4 px-2.5 py-0.5 bg-yellow-500 text-neutral-950 text-[9px] font-black uppercase tracking-wider rounded-full">
+                              Melhor Preço
+                            </div>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                              <div className="text-center md:text-left">
+                                <span className="text-[10px] text-neutral-400 block uppercase font-mono tracking-wider">Valor total real:</span>
+                                <span className="text-lg text-neutral-400 line-through font-bold font-mono">R$ 83,00</span>
+                              </div>
+                              <div className="text-center md:text-right">
+                                <span className="text-[10px] text-yellow-400 block uppercase font-mono tracking-wider font-extrabold">🔥 Oferta promocional de hoje:</span>
+                                <div className="flex items-baseline justify-center md:justify-end gap-1">
+                                  <span className="text-xs text-yellow-500 font-bold">R$</span>
+                                  <span className="text-4xl font-black text-yellow-400 tracking-tight font-mono drop-shadow-[0_0_10px_rgba(234,179,8,0.4)] animate-pulse">19,90</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-[11px] text-green-400 font-bold text-center bg-green-950/20 py-2 rounded-xl border border-green-500/20">
+                              🎁 Você economiza R$ 63,10 hoje. (Aproveite esta Oportunidade)
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Column B: Benefícios Emocionais & Prova Social */}
+                        <div className="flex flex-col justify-between space-y-6">
+                          
+                          {/* Emotional Benefits */}
+                          <div className="space-y-4">
+                            <span className="text-[10px] font-mono uppercase text-yellow-500 tracking-wider block font-bold">
+                              🌟 Sua Jornada de Transformação:
+                            </span>
+                            
+                            <div className="grid grid-cols-1 gap-3">
+                              {/* Benefit 1 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Economize horas de preparação</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Chega de inventar histórias ou planejar atividades na correria. Tudo estruturado passo a passo.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 2 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Material pronto para imprimir</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Ebook formatado profissionalmente em resolução HD para imprimir em qualquer impressora A4.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 3 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Aprenda ouvindo em qualquer lugar</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Audiobooks dinâmicos em MP3 para escutar no carro, nas tarefas domésticas ou em passeios.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 4 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Conteúdo organizado profissionalmente</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Sequência ideal para fixação pedagógica estruturada por profissionais de pedagogia.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 5 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Tenha acesso imediato após pagamento</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Em menos de 2 minutos você recebe no seu e-mail todos os links de acesso seguro.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 6 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Experiência prática e moderna</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed">Interface focada no celular e de leitura agradável para todas as idades.</p>
+                                </div>
+                              </div>
+
+                              {/* Benefit 7 */}
+                              <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0 mt-0.5 text-xs font-black">
+                                  ✓
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h5 className="text-xs font-bold text-neutral-200">Recursos premium para facilitar sua rotina</h5>
+                                  <p className="text-[11px] text-neutral-400 leading-relaxed font-medium text-yellow-100/90">Ebook, áudio narrado de alta fidelidade e exercícios prontos de pedagogia.</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Prova Social */}
+                          <div className="p-4 rounded-2xl bg-neutral-900/80 border border-neutral-800 flex flex-col md:flex-row items-center gap-4">
+                            <div className="flex -space-x-2 shrink-0">
+                              <span className="w-8 h-8 rounded-full bg-indigo-600 border-2 border-neutral-950 flex items-center justify-center text-[9px] font-bold text-white shadow-md">AP</span>
+                              <span className="w-8 h-8 rounded-full bg-yellow-600 border-2 border-neutral-950 flex items-center justify-center text-[9px] font-bold text-white shadow-md">MS</span>
+                              <span className="w-8 h-8 rounded-full bg-emerald-600 border-2 border-neutral-950 flex items-center justify-center text-[9px] font-bold text-white shadow-md">LN</span>
+                              <span className="w-8 h-8 rounded-full bg-pink-600 border-2 border-neutral-950 flex items-center justify-center text-[9px] font-bold text-white shadow-md">TC</span>
+                              <span className="w-8 h-8 rounded-full bg-yellow-500 border-2 border-neutral-950 flex items-center justify-center text-[10px] font-black text-neutral-950 shadow-md">+1.4k</span>
+                            </div>
+                            <div className="space-y-1 text-center md:text-left">
+                              <div className="flex justify-center md:justify-start gap-0.5 text-yellow-400">
+                                <Star size={13} fill="currentColor" />
+                                <Star size={13} fill="currentColor" />
+                                <Star size={13} fill="currentColor" />
+                                <Star size={13} fill="currentColor" />
+                                <Star size={13} fill="currentColor" />
+                              </div>
+                              <p className="text-[11px] text-neutral-200 leading-relaxed font-medium">
+                                ✨ <b>Mais de 1.450 famílias e educadores</b> já acessaram o conteúdo premium e aprovaram o material completo.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botões Estratégicos & Conversão */}
+                      <div className="border-t border-yellow-500/10 pt-8 space-y-8 relative z-10 text-center">
+                        
+                        {/* Gatilhos Mentais */}
+                        <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-2 text-[9px] md:text-[10px] font-mono text-yellow-500 font-extrabold uppercase tracking-widest opacity-95 bg-yellow-500/5 py-1.5 px-3 rounded-full border border-yellow-500/10 max-w-4xl mx-auto">
+                          <span className="flex items-center gap-1">⏱️ Oferta promocional por tempo limitado</span>
+                          <span className="text-neutral-700 hidden md:inline">•</span>
+                          <span className="flex items-center gap-1">♾️ Acesso vitalício</span>
+                          <span className="text-neutral-700 hidden md:inline">•</span>
+                          <span className="flex items-center gap-1">📦 Pacote VIP Premium</span>
+                          <span className="text-neutral-700 hidden md:inline">•</span>
+                          <span className="flex items-center gap-1">⭐ Mais vantajoso</span>
+                          <span className="text-neutral-700 hidden md:inline">•</span>
+                          <span className="flex items-center gap-1">💰 Economize mais de R$ 60 hoje</span>
+                          <span className="text-neutral-700 hidden md:inline">•</span>
+                          <span className="flex items-center gap-1">⚡ Acesso imediato após compra</span>
+                        </div>
+
+                        {/* BOTÃO PRINCIPAL E MAIS DESTACADO (Upgrade VIP) */}
+                        <div className="max-w-xl mx-auto space-y-4">
+                          <div className="text-center space-y-1">
+                            <span className="text-xs text-neutral-400 line-through block font-mono">De R$ 83,00</span>
+                            <span className="text-xs text-yellow-400 font-black tracking-widest uppercase font-mono block">🔥 Por apenas R$ 19,90</span>
+                          </div>
+
                           <a 
                             href="https://hotmart.com" 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="w-full py-2 bg-[#d4af37] hover:brightness-110 text-neutral-950 rounded-xl text-xs font-extrabold font-sans text-center transition-all block shadow-md shadow-yellow-950/30"
+                            className="group relative w-full py-4.5 px-6 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 hover:from-yellow-400 hover:via-amber-400 hover:to-yellow-500 text-neutral-950 rounded-2xl text-sm md:text-base font-black font-sans text-center transition-all duration-300 block shadow-[0_0_25px_rgba(234,179,8,0.35)] hover:shadow-[0_0_35px_rgba(234,179,8,0.55)] hover:scale-[1.01] active:scale-95 border-2 border-yellow-400"
                           >
-                            Adquirir Versão Completa (Hotmart)
+                            <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-1 bg-red-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg border border-red-500 animate-pulse flex items-center gap-1">
+                              ⭐ MAIS VANTAJOSO
+                            </span>
+                            <div className="flex flex-col md:flex-row items-center justify-center gap-2">
+                              <span className="uppercase tracking-wider">🔥 Liberar Meu Acesso VIP Agora</span>
+                              <span className="hidden md:inline opacity-40">|</span>
+                              <span className="font-mono text-base md:text-lg bg-neutral-950 text-[#d4af37] px-3 py-0.5 rounded-xl font-black">
+                                R$ 19,90
+                              </span>
+                            </div>
                           </a>
+                          
+                          <p className="text-[10px] md:text-xs font-mono font-bold text-green-400 tracking-wide uppercase">
+                            Economize R$ 63,10 hoje.
+                          </p>
                         </div>
+
+                        {/* ORGANIZAÇÃO DOS BOTÕES INDIVIDUAIS (Opções inferiores para contraste cognitivo) */}
+                        <div className="space-y-4 pt-6 border-t border-neutral-900/80 max-w-3xl mx-auto">
+                          <span className="text-[10px] font-mono uppercase text-neutral-500 block font-bold tracking-wider">
+                            Ou adquira os itens individualmente (Opções com menor vantagem financeira):
+                          </span>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {/* BOTÃO 1 */}
+                            <a 
+                              href="https://hotmart.com" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-3 border border-neutral-800 bg-neutral-950/60 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[11px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-1 group opacity-75 hover:opacity-100"
+                            >
+                              <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Ebook</span>
+                              <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 19,00</span>
+                            </a>
+
+                            {/* BOTÃO 2 */}
+                            <a 
+                              href="https://hotmart.com" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-3 border border-neutral-800 bg-neutral-950/60 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[11px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-1 group opacity-75 hover:opacity-100"
+                            >
+                              <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Audiobooks</span>
+                              <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 37,00</span>
+                            </a>
+
+                            {/* BOTÃO 3 */}
+                            <a 
+                              href="https://hotmart.com" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-3 border border-neutral-800 bg-neutral-950/60 hover:bg-neutral-900 text-neutral-400 hover:text-white rounded-xl text-[11px] font-bold text-center transition-all duration-200 flex flex-col justify-center items-center gap-1 group opacity-75 hover:opacity-100"
+                            >
+                              <span className="group-hover:text-neutral-200 transition-colors">Comprar Apenas Guia</span>
+                              <span className="font-mono text-yellow-500/80 group-hover:text-yellow-500 font-extrabold">R$ 27,00</span>
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* TRUST, SECURITY & GUARANTEE SEALS */}
+                        <div className="pt-6 grid grid-cols-2 md:grid-cols-5 gap-3.5 max-w-4xl mx-auto text-left border-t border-neutral-900/80">
+                          {/* Seal 1 */}
+                          <div className="flex gap-2 items-center p-2.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/40">
+                            <CheckCircle className="text-emerald-500 shrink-0" size={16} />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-neutral-200 block leading-tight">Compra 100% segura</span>
+                              <span className="text-[9px] text-neutral-500 block leading-none">Pagamento protegido</span>
+                            </div>
+                          </div>
+
+                          {/* Seal 2 */}
+                          <div className="flex gap-2 items-center p-2.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/40">
+                            <ShieldCheck className="text-emerald-500 shrink-0" size={16} />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-neutral-200 block leading-tight">Garantia Hotmart</span>
+                              <span className="text-[9px] text-neutral-500 block leading-none">Incondicional 7 dias</span>
+                            </div>
+                          </div>
+
+                          {/* Seal 3 */}
+                          <div className="flex gap-2 items-center p-2.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/40">
+                            <Lock className="text-emerald-500 shrink-0" size={16} />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-neutral-200 block leading-tight">Pagamento protegido</span>
+                              <span className="text-[9px] text-neutral-500 block leading-none">Criptografia SSL de ponta</span>
+                            </div>
+                          </div>
+
+                          {/* Seal 4 */}
+                          <div className="flex gap-2 items-center p-2.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/40">
+                            <Sparkles className="text-yellow-500 shrink-0" size={16} />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-neutral-200 block leading-tight">Acesso imediato</span>
+                              <span className="text-[9px] text-neutral-500 block leading-none">Envio instantâneo por e-mail</span>
+                            </div>
+                          </div>
+
+                          {/* Seal 5 */}
+                          <div className="flex gap-2 items-center p-2.5 rounded-2xl bg-neutral-900/40 border border-neutral-800/40 col-span-2 md:col-span-1">
+                            <Star className="text-yellow-500 shrink-0 animate-pulse" size={16} />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-neutral-200 block leading-tight">Acesso vitalício</span>
+                              <span className="text-[9px] text-neutral-500 block leading-none">Sem taxas ou mensalidades</span>
+                            </div>
+                          </div>
+                        </div>
+
                       </div>
+
                     </div>
                   </div>
 
                 </div>
+              )}
+                </>
               )}
 
             </motion.div>
@@ -1724,7 +2265,7 @@ export default function App() {
                 return (
                   <button
                     key={idx}
-                    onClick={() => setCurrentPageIndex(idx)}
+                    onClick={() => handlePageSelect(idx)}
                     className={`h-2.5 rounded-full transition-all duration-300 ${
                       isCurrent 
                         ? "w-8 bg-yellow-500 shadow-md shadow-yellow-900/30" 
