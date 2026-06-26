@@ -75,6 +75,7 @@ export default function App() {
   // Clean up audio on page unmount or change
   useEffect(() => {
     stopNarration();
+    setAudioState(prev => ({ ...prev, error: null }));
     return () => {
       stopNarration();
     };
@@ -817,15 +818,15 @@ export default function App() {
             <span>Baixar PDF</span>
           </button>
 
-          {/* THEME TOGGLE */}
-          <button
-            id="theme_toggle"
-            onClick={() => setTheme(prev => prev === "dark" ? "paper" : "dark")}
-            className={`p-2 rounded-full border transition-all text-sm ${theme === "dark" ? "bg-neutral-800 border-neutral-700 text-yellow-400 hover:bg-neutral-700" : "bg-stone-100 border-stone-300 text-stone-700 hover:bg-stone-200"}`}
-            title="Mudar paleta visual"
+          {/* MODO NOITE FIXADO */}
+          <div 
+            id="theme_indicator"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-850 bg-neutral-900/60 text-xs font-mono font-bold text-yellow-400 select-none shadow-[0_2px_10px_rgba(0,0,0,0.2)] animate-pulse"
+            title="Modo Noite confortável ativo"
           >
-            {theme === "dark" ? "☀️ Dia" : "🌙 Noite"}
-          </button>
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" />
+            <span>🌙 Modo Noite</span>
+          </div>
         </div>
       </header>
 
@@ -856,8 +857,17 @@ export default function App() {
       )}
 
       {audioState.error && (
-        <div className="bg-red-500/10 border-b border-red-500/30 text-red-400 text-xs px-4 py-2 text-center">
-          ⚠️ {audioState.error}
+        <div className="bg-red-500/10 border-b border-red-500/30 text-red-400 text-xs px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex-1 text-center font-medium">
+            ⚠️ {audioState.error}
+          </div>
+          <button 
+            onClick={() => setAudioState(prev => ({ ...prev, error: null }))}
+            className="p-1 hover:bg-red-500/20 rounded transition-colors text-red-400 shrink-0"
+            title="Fechar aviso"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
@@ -917,9 +927,6 @@ export default function App() {
                 >
                   <Printer size={13} /> Gerar Ebook PDF 📑
                 </button>
-                <div className="text-[10px] text-center text-yellow-500/90 font-medium">
-                  Pronto para Vender na Hotmart
-                </div>
               </div>
 
               {/* Legal Note in Sidebar bottom */}
@@ -1113,128 +1120,250 @@ export default function App() {
 
               {/* CONTENT PAGES TYPE */}
               {currentPage.type === "content" && (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-8 py-2">
+                <div className="max-w-2xl mx-auto space-y-6 py-2">
                   
-                  {/* Left Column (Illustration if available) */}
+                  {/* Título e Subtítulo */}
+                  <div className="text-center space-y-1 mb-6">
+                    <h2 className="font-serif text-2xl md:text-3.5xl font-black text-[#d4af37] leading-tight">
+                      {currentPage.title}
+                    </h2>
+                    {currentPage.subtitle && (
+                      <p className="text-xs font-mono uppercase tracking-widest text-yellow-500">
+                        {currentPage.subtitle}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Imagem Cinematográfica Principal */}
                   {currentPage.image && (
-                    <div className="md:col-span-5 flex flex-col justify-start">
-                      <div className="border-4 border-yellow-600/30 rounded-2xl overflow-hidden shadow-2xl relative group bg-neutral-950">
-                        <img 
-                          src={currentPage.image} 
-                          alt={currentPage.imageAlt}
-                          referrerPolicy="no-referrer"
-                          className="w-full aspect-[3/4] object-cover transition-transform duration-700 group-hover:scale-105" 
-                        />
-                        <div className="absolute bottom-0 inset-x-0 bg-black/75 p-3 text-center border-t border-yellow-900/40 opacity-90 group-hover:opacity-100 transition-opacity">
-                          <span className="font-sans font-medium text-[10px] text-yellow-300">
-                            {currentPage.imageAlt}
-                          </span>
-                        </div>
+                    <div className="border-4 border-yellow-600/20 rounded-2xl overflow-hidden shadow-2xl bg-neutral-950 mb-6 group">
+                      <img 
+                        src={currentPage.image} 
+                        alt={currentPage.imageAlt}
+                        referrerPolicy="no-referrer"
+                        className="w-full aspect-[16/9] object-cover transition-transform duration-700 group-hover:scale-105" 
+                      />
+                      <div className="bg-black/80 p-3 text-center border-t border-yellow-900/40">
+                        <span className="font-sans font-medium text-[10px] text-yellow-400">
+                          {currentPage.imageAlt}
+                        </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Right Column (Text blocks and features) */}
-                  <div className={currentPage.image ? "md:col-span-7 space-y-5" : "md:col-span-12 max-w-3xl mx-auto space-y-5"}>
-                    
-                    <h2 className="font-serif text-2xl md:text-3.5xl font-extrabold text-[#d4af37] leading-tight">
-                      {currentPage.title}
-                    </h2>
-                    {currentPage.subtitle && (
-                      <p className="text-xs font-mono uppercase tracking-widest text-yellow-600">
-                        {currentPage.subtitle}
-                      </p>
-                    )}
+                  {/* Texto Parte 1 (primeiros 2 parágrafos) */}
+                  <div className="space-y-4 text-[13px] md:text-[15px] leading-relaxed text-yellow-50/95 text-justify">
+                    {currentPage.paragraphs.slice(0, 2).map((para, pIdx) => {
+                      if (pIdx === 0 && para.length > 5) {
+                        const firstChar = para.charAt(0);
+                        const remainingText = para.slice(1);
+                        return (
+                          <p key={pIdx} className="indent-0">
+                            <span className="float-left text-4xl md:text-5xl font-serif font-extrabold text-[#d4af37] mr-2 mt-1 leading-none bg-[#d4af37]/10 px-2 rounded-lg border border-[#d4af37]/20">
+                              {firstChar}
+                            </span>
+                            {remainingText}
+                          </p>
+                        );
+                      }
+                      return (
+                        <p key={pIdx} className="indent-6">
+                          {para}
+                        </p>
+                      );
+                    })}
+                  </div>
 
-                    {/* Prose with large Drop Cap (capitular) for 1st paragraph */}
-                    <div className="space-y-4 text-xs md:text-sm md:text-base leading-relaxed text-yellow-500/10"></div>
+                  {/* Player de Áudio Premium Integrado */}
+                  <div className={`rounded-2xl p-5 md:p-6 my-6 border transition-all duration-300 ${
+                    theme === "dark" 
+                      ? "bg-neutral-900/80 border-yellow-500/15 shadow-[0_4px_25px_rgba(212,175,55,0.04)]" 
+                      : "bg-[#faf8f4] border-stone-200 shadow-md"
+                  }`}>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      {/* Left Info: Play button & Status */}
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => {
+                            const isThisPagePlaying = audioState.isPlaying && audioState.activePageId === currentPage.id;
+                            if (isThisPagePlaying) {
+                              stopNarration();
+                            } else {
+                              playNarration(currentPage);
+                            }
+                          }}
+                          disabled={audioState.isLoading && audioState.activePageId === currentPage.id}
+                          className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 transform active:scale-95 shrink-0 ${
+                            audioState.isPlaying && audioState.activePageId === currentPage.id
+                              ? "bg-red-600 text-white shadow-lg shadow-red-600/20 animate-pulse"
+                              : "bg-gradient-to-r from-yellow-500 to-amber-600 text-neutral-950 shadow-lg shadow-yellow-500/10 hover:brightness-110"
+                          }`}
+                        >
+                          {audioState.isLoading && audioState.activePageId === currentPage.id ? (
+                            <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : audioState.isPlaying && audioState.activePageId === currentPage.id ? (
+                            <Pause size={24} fill="currentColor" />
+                          ) : (
+                            <Play size={24} className="ml-1" fill="currentColor" />
+                          )}
+                        </button>
+
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-mono font-bold tracking-wider text-yellow-500 uppercase">
+                              {audioState.isPlaying && audioState.activePageId === currentPage.id ? "Tocando Agora" : "Áudio Premium Humano"}
+                            </span>
+                            {audioState.isPlaying && audioState.activePageId === currentPage.id && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                            )}
+                          </div>
+                          <h4 className={`text-sm md:text-base font-bold font-serif ${theme === "dark" ? "text-neutral-100" : "text-stone-900"}`}>
+                            {audioState.isPlaying && audioState.activePageId === currentPage.id ? "Narração de Cinema Ativa" : "Ouvir Trilha Sonora do Capítulo"}
+                          </h4>
+                          <p className="text-xs text-neutral-400">
+                            {audioState.isPlaying && audioState.activePageId === currentPage.id ? "Mesma voz humana suave da prévia da AI Studio" : "Toque para ouvir a narração profissional em alta qualidade"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right Controls: Playback Speed selector */}
+                      <div className="flex items-center gap-2 self-end md:self-auto bg-black/20 px-3 py-1.5 rounded-full border border-neutral-800">
+                        <Sliders size={12} className="text-yellow-500" />
+                        <span className="text-[10px] font-mono text-neutral-400 uppercase">Velocidade:</span>
+                        <select
+                          value={narrationSpeed}
+                          onChange={e => setNarrationSpeed(parseFloat(e.target.value))}
+                          className="bg-transparent text-xs text-yellow-400 font-bold outline-none cursor-pointer"
+                        >
+                          <option value="0.8">0.8x</option>
+                          <option value="1">1.0x</option>
+                          <option value="1.2">1.2x</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Simulated audio waveform or visual progress tracker */}
+                    <div className="pt-3 flex items-center gap-3">
+                      <span className="text-[10px] font-mono text-neutral-400">0:00</span>
+                      <div className="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden relative">
+                        <div 
+                          className={`h-full bg-gradient-to-r from-yellow-500 to-amber-500 transition-all duration-300 ${audioState.isPlaying && audioState.activePageId === currentPage.id ? "w-2/3" : "w-0"}`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono text-neutral-400">
+                        {audioState.isPlaying && audioState.activePageId === currentPage.id ? "MP3 Real" : "Alta Definição"}
+                      </span>
+                    </div>
+
+                    {/* Interactive visual equalizer soundbars */}
+                    {audioState.isPlaying && audioState.activePageId === currentPage.id && (
+                      <div className="pt-3 flex justify-center gap-1">
+                        {Array.from({ length: 24 }).map((_, barIdx) => (
+                          <div
+                            key={barIdx}
+                            className="w-1 bg-gradient-to-t from-yellow-500 to-amber-500 rounded-full"
+                            style={{
+                              height: `${Math.floor(Math.random() * 20) + 4}px`,
+                              animation: "bounce 0.6s ease-in-out infinite alternate",
+                              animationDelay: `${barIdx * 0.05}s`
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Imagem Contextual */}
+                  {currentPage.imageContextual && (
+                    <div className="border-2 border-yellow-600/10 rounded-2xl overflow-hidden shadow-xl bg-neutral-950 my-6 group">
+                      <img 
+                        src={currentPage.imageContextual} 
+                        alt={currentPage.imageContextualAlt}
+                        referrerPolicy="no-referrer"
+                        className="w-full aspect-[4/3] object-cover transition-transform duration-700 group-hover:scale-105" 
+                      />
+                      <div className="bg-black/90 p-2.5 text-center border-t border-yellow-900/40">
+                        <span className="font-sans font-medium text-[10px] text-yellow-500">
+                          {currentPage.imageContextualAlt}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Texto Parte 2 (resto do texto) */}
+                  {currentPage.paragraphs.length > 2 && (
                     <div className="space-y-4 text-[13px] md:text-[15px] leading-relaxed text-yellow-50/90 text-justify">
-                      {currentPage.paragraphs.map((para, pIdx) => {
-                        if (pIdx === 0 && para.length > 5) {
-                          const firstChar = para.charAt(0);
-                          const remainingText = para.slice(1);
+                      {currentPage.paragraphs.slice(2).map((para, pIdx) => (
+                        <p key={pIdx} className="indent-6">
+                          {para}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Meta-Quotes inside prose content */}
+                  {currentPage.quote && (
+                    <div className="border-l-4 border-yellow-500 pl-4 py-2 my-6 bg-yellow-500/5 text-xs md:text-sm italic">
+                      <p className="text-yellow-400">"{currentPage.quote}"</p>
+                      <p className="text-[10px] font-mono uppercase text-neutral-500 mt-1">— {currentPage.quoteAuthor}</p>
+                    </div>
+                  )}
+
+                  {/* Paragraph highlights of important pedagogical values */}
+                  {currentPage.highlights && currentPage.highlights.length > 0 && (
+                    <div className="mt-5 space-y-2.5">
+                      {currentPage.highlights.map((highlight, hIdx) => {
+                        const parts = highlight.split(":");
+                        if (parts.length > 1) {
                           return (
-                            <p key={pIdx} className="indent-0">
-                              <span className="float-left text-4xl md:text-5xl font-serif font-extrabold text-[#d4af37] mr-2 mt-1 line-height-none bg-[#d4af37]/10 px-2 rounded-lg border border-[#d4af37]/20">
-                                {firstChar}
-                              </span>
-                              {remainingText}
-                            </p>
+                            <div key={hIdx} className="bg-yellow-500/5 border border-yellow-500/15 p-3.5 rounded-xl text-xs flex gap-3 items-start">
+                              <Sparkles className="text-yellow-500 shrink-0 mt-0.5" size={16} />
+                              <div>
+                                <span className="font-bold text-[#d4af37]">{parts[0]}: </span>
+                                <span className="text-yellow-100/90 leading-relaxed">{parts.slice(1).join(":")}</span>
+                              </div>
+                            </div>
                           );
                         }
                         return (
-                          <p key={pIdx} className="indent-6">
-                            {para}
-                          </p>
+                          <div key={hIdx} className="bg-yellow-500/5 border border-yellow-500/15 p-3.5 rounded-xl text-xs flex gap-3 items-center text-yellow-100/90">
+                            <Sparkles className="text-yellow-500 shrink-0" size={16} />
+                            <span>{highlight}</span>
+                          </div>
                         );
                       })}
                     </div>
+                  )}
 
-                    {/* Meta-Quotes inside prose content */}
-                    {currentPage.quote && (
-                      <div className="border-l-4 border-yellow-500 pl-4 py-1.5 my-4 bg-yellow-950/10 text-xs md:text-sm italic">
-                        <p className="text-yellow-300">"{currentPage.quote}"</p>
-                        <p className="text-[10px] font-mono uppercase text-neutral-500 mt-1">— {currentPage.quoteAuthor}</p>
-                      </div>
-                    )}
-
-                    {/* Paragraph highlights of important pedagogical values */}
-                    {currentPage.highlights && currentPage.highlights.length > 0 && (
-                      <div className="mt-5 space-y-2">
-                        {currentPage.highlights.map((highlight, hIdx) => {
-                          const parts = highlight.split(":");
-                          if (parts.length > 1) {
-                            return (
-                              <div key={hIdx} className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg text-xs flex mt-2 gap-3 items-start">
-                                <Sparkles className="text-yellow-500 shrink-0 mt-0.5" size={16} />
-                                <div>
-                                  <span className="font-bold text-[#d4af37]">{parts[0]}: </span>
-                                  <span className="text-yellow-100">{parts.slice(1).join(":")}</span>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div key={hIdx} className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg text-xs flex mt-2 gap-3 items-center text-yellow-100">
-                              <Sparkles className="text-yellow-500 shrink-0" size={16} />
-                              <span>{highlight}</span>
+                  {/* Timeline steps block (Sleepy bird / Treasure map) */}
+                  {currentPage.steps && currentPage.steps.length > 0 && (
+                    <div className="mt-6 pt-4 border-t border-yellow-700/10">
+                      <span className="text-[11px] font-mono uppercase tracking-widest text-yellow-500 flex items-center gap-1.5 mb-4">
+                        <Compass size={14} /> Passo a Passo da Lição Desenvolvida
+                      </span>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {currentPage.steps.map((step, sIdx) => (
+                          <div 
+                            key={sIdx}
+                            className={`p-4 rounded-xl border transition-all hover:scale-[1.01] ${
+                              theme === "dark" 
+                                ? "bg-neutral-900/50 border-neutral-800/50 hover:bg-neutral-900/85" 
+                                : "bg-stone-50 border-stone-200 hover:bg-stone-100"
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-serif font-bold text-sm text-yellow-500">{step.title}</span>
+                              <span className="font-mono text-[9px] bg-[#d4af37]/25 text-[#d4af37] px-1.5 py-0.5 rounded-full font-black">
+                                {step.number}
+                              </span>
                             </div>
-                          );
-                        })}
+                            <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">{step.desc}</p>
+                          </div>
+                        ))}
                       </div>
-                    )}
-
-                    {/* Timeline steps block (Sleepy bird / Treasure map) */}
-                    {currentPage.steps && currentPage.steps.length > 0 && (
-                      <div className="mt-6 pt-4 border-t border-yellow-700/10">
-                        <span className="text-[11px] font-mono uppercase tracking-widest text-yellow-600 flex items-center gap-1.5 mb-4">
-                          <Compass size={14} /> Passo a Passo da Lição Desenvolvida
-                        </span>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                          {currentPage.steps.map((step, sIdx) => (
-                            <div 
-                              key={sIdx}
-                              className={`p-3.5 rounded-xl border transition-all hover:scale-[1.01] ${
-                                theme === "dark" 
-                                  ? "bg-neutral-800/50 border-neutral-700/50 hover:bg-neutral-800" 
-                                  : "bg-stone-50 border-stone-200 hover:bg-stone-100"
-                              }`}
-                            >
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="font-serif font-bold text-sm text-yellow-500">{step.title}</span>
-                                <span className="font-mono text-[9px] bg-[#d4af37]/20 text-[#d4af37] px-1.5 py-0.5 rounded-full font-black">
-                                  {step.number}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">{step.desc}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
+                    </div>
+                  )}
 
                 </div>
               )}
@@ -1286,148 +1415,280 @@ export default function App() {
 
               {/* CONCLUSION PAGE TYPE (CONVÊNIO LANÇAMENTO & EMAIL CADASTRO/QUIZ) */}
               {currentPage.type === "conclusion" && (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-stretch py-4">
+                <div className="space-y-8 py-4">
                   
-                  {/* Left Column: Vol 2 & Vol 3 conversions details */}
-                  <div className="md:col-span-6 space-y-5 flex flex-col justify-between border-b md:border-b-0 md:border-r border-yellow-700/15 pb-6 md:pb-0 md:pr-6">
-                    <div>
-                      <div className="inline-flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-2.5 py-1 rounded text-xs font-mono font-semibold mb-2">
-                        <Sparkles size={14} /> Fim do Volume 1
-                      </div>
-                      
-                      <h2 className="font-serif text-2xl md:text-3.5xl font-extrabold text-[#d4af37] leading-tight">
-                        {currentPage.title}
-                      </h2>
-                      <p className="text-xs font-mono uppercase tracking-widest text-yellow-600 mt-1">
-                        {currentPage.subtitle}
-                      </p>
+                  {/* Concluding words section */}
+                  <div className="max-w-2xl mx-auto text-center space-y-3.5 mb-6">
+                    <div className="inline-flex items-center gap-1.5 text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-full text-xs font-mono font-semibold">
+                      <Sparkles size={14} /> Fim do Volume 1
+                    </div>
+                    
+                    <h2 className="font-serif text-3xl md:text-4.5xl font-black text-[#d4af37] leading-tight">
+                      {currentPage.title}
+                    </h2>
+                    <p className="text-xs font-mono uppercase tracking-widest text-yellow-600">
+                      {currentPage.subtitle}
+                    </p>
 
-                      <div className="space-y-3.5 text-xs md:text-sm my-4 text-yellow-100/90 leading-relaxed text-justify">
-                        <p>{currentPage.paragraphs[0]}</p>
-                        <p>{currentPage.paragraphs[1]}</p>
-                        <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/25 space-y-2 mt-4 text-xs">
-                          <span className="font-bold text-yellow-500">{currentPage.paragraphs[2]}</span>
-                          <p className="text-yellow-100/90 font-medium">{currentPage.paragraphs[3]}</p>
-                          <p className="text-yellow-100/90 font-medium">{currentPage.paragraphs[4]}</p>
+                    <div className="space-y-4 text-xs md:text-sm text-yellow-100/90 leading-relaxed text-justify max-w-xl mx-auto">
+                      <p>{currentPage.paragraphs[0]}</p>
+                      <p>{currentPage.paragraphs[1]}</p>
+                      <div className="p-4 rounded-xl bg-yellow-500/5 border border-yellow-500/25 space-y-2 text-xs">
+                        <span className="font-bold text-yellow-500 block text-center mb-1">{currentPage.paragraphs[2]}</span>
+                        <p className="text-yellow-100/80 text-center font-medium">{currentPage.paragraphs[3]}</p>
+                        <p className="text-yellow-100/80 text-center font-medium">{currentPage.paragraphs[4]}</p>
+                      </div>
+                      <p className="text-yellow-500 font-serif italic text-center text-sm">{currentPage.paragraphs[5]}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-stretch pt-4">
+                    
+                    {/* Left Column: Email Lead Capture */}
+                    <div className="md:col-span-6 space-y-5 flex flex-col justify-between border-b md:border-b-0 md:border-r border-yellow-700/15 pb-6 md:pb-0 md:pr-6">
+                      <div className="space-y-4">
+                        <div className="inline-flex items-center gap-2 text-xs font-mono text-[#d4af37]">
+                          <Mail size={16} /> Receber Lançamento dos Volumes 2 e 3
                         </div>
-                        <p className="text-yellow-500 font-serif italic mt-4">{currentPage.paragraphs[5]}</p>
+                        <h3 className="font-serif text-lg font-bold text-yellow-100 leading-tight">
+                          Gostaria de continuar a jornada com Toinho e Val gratuitamente?
+                        </h3>
+                        <p className="text-xs text-neutral-400 leading-relaxed">
+                          Cadastre seu e-mail de pai ou educador para ser notificado em primeira mão assim que os novos livros e áudios forem lançados e faça o download gratuito das novas edições.
+                        </p>
+                      </div>
+
+                      <div className="bg-gradient-to-r from-yellow-600/15 to-amber-600/10 p-5 rounded-xl border border-yellow-700/25 mt-4">
+                        <p className="text-[10px] text-neutral-400 mb-3 uppercase tracking-wider font-mono">Formulário de Pré-Inscrição Gratuita</p>
+                        
+                        {leadSubmitted ? (
+                          <div className="bg-yellow-500/20 p-3.5 rounded text-xs text-yellow-400 font-bold flex items-center gap-2 border border-yellow-500/30">
+                            <Check size={18} strokeWidth={3} /> E-mail cadastrado com sucesso! Enviaremos as novidades para você.
+                          </div>
+                        ) : (
+                          <form onSubmit={handleLeadSubmit} className="flex gap-2">
+                            <input 
+                              type="email" 
+                              required
+                              placeholder="educador@escola.com.br"
+                              value={emailLead}
+                              onChange={e => setEmailLead(e.target.value)}
+                              className="bg-neutral-950/80 border border-neutral-850 rounded px-3 py-2 text-xs text-white placeholder-neutral-500 flex-1 focus:ring-1 focus:ring-yellow-500 outline-none"
+                            />
+                            <button 
+                              type="submit"
+                              className="bg-[#d4af37] hover:brightness-110 text-neutral-950 text-xs font-bold px-4 py-2 rounded transition-all shrink-0"
+                            >
+                              Me Inscrever!
+                            </button>
+                          </form>
+                        )}
                       </div>
                     </div>
 
-                    {/* Email lead capture - High Conversion */}
-                    <div className="bg-gradient-to-r from-yellow-600/20 to-amber-600/10 p-4 rounded-xl border border-yellow-700/30 mt-4">
-                      <div className="flex items-center gap-2 mb-2 text-xs font-mono text-yellow-500">
-                        <Mail size={14} /> Receber Lançamento dos Volumes 2 e 3
-                      </div>
-                      <p className="text-[10px] text-neutral-400 mb-3">Preencha o e-mail de pais/educadores para baixar de graça quando os próximos volumes saírem!</p>
-                      
-                      {leadSubmitted ? (
-                        <div className="bg-yellow-500/20 p-2.5 rounded text-xs text-yellow-400 font-bold flex items-center gap-2">
-                          <Check size={16} /> E-mail cadastrado com sucesso! Enviaremos o Volume 2 em primeira mão.
+                    {/* Right Column: Interactive Quiz Game */}
+                    <div className="md:col-span-6 flex flex-col justify-between pt-4 md:pt-0 pl-0 md:pl-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2 text-[#d4af37] font-mono text-xs">
+                          <HelpCircle size={16} /> Teste do Conhecimento (Infantil)
                         </div>
-                      ) : (
-                        <form onSubmit={handleLeadSubmit} className="flex gap-2">
-                          <input 
-                            type="email" 
-                            required
-                            placeholder="educador@escola.com.br"
-                            value={emailLead}
-                            onChange={e => setEmailLead(e.target.value)}
-                            className="bg-neutral-950/80 border border-neutral-800 rounded px-3 py-1.5 text-xs text-white placeholder-neutral-500 flex-1 focus:ring-1 focus:ring-yellow-500 outline-none"
-                          />
-                          <button 
-                            type="submit"
-                            className="bg-yellow-500 hover:bg-yellow-600 text-neutral-950 text-xs font-bold px-3 py-1.5 rounded transition-all shrink-0"
-                          >
-                            Quero Receber!
-                          </button>
+                        <h3 className="font-serif text-lg font-bold text-yellow-100 leading-tight">
+                          Será que você aprendeu com Toinho e Val?
+                        </h3>
+                        <p className="text-xs text-neutral-400">Responda às questões rápidas para testar o aprendizado do seu filho!</p>
+
+                        <form onSubmit={handleQuizSubmit} className="space-y-4 mt-4">
+                          {quizQuestions.map((question) => (
+                            <div key={question.id} className="space-y-1.5">
+                              <p className="text-xs font-medium text-yellow-300">
+                                {question.id}. {question.q}
+                              </p>
+                              <div className="space-y-1 text-xs">
+                                {question.options.map((opt) => {
+                                  const isChecked = quizAnswers[question.id] === opt.value;
+                                  return (
+                                    <label 
+                                      key={opt.value} 
+                                      className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-all border ${
+                                        isChecked 
+                                          ? "bg-yellow-500/10 border-yellow-500/50 text-yellow-200" 
+                                          : theme === "dark" 
+                                            ? "bg-neutral-950/40 border-neutral-800/40 hover:bg-neutral-800/30 text-neutral-300"
+                                            : "bg-stone-50 border-stone-200 hover:bg-stone-100 text-stone-700"
+                                      }`}
+                                    >
+                                      <input 
+                                        type="radio" 
+                                        name={`q-${question.id}`}
+                                        value={opt.value}
+                                        checked={isChecked}
+                                        disabled={quizSubmitted}
+                                        onChange={() => setQuizAnswers(prev => ({ ...prev, [question.id]: opt.value }))}
+                                        className="mt-0.5 border-yellow-700 text-yellow-500 focus:ring-yellow-500 shrink-0"
+                                      />
+                                      <span>{opt.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+
+                          {!quizSubmitted ? (
+                            <button
+                              type="submit"
+                              disabled={Object.keys(quizAnswers).length < quizQuestions.length}
+                              className="w-full bg-[#d4af37] hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-950 font-bold py-2 rounded text-xs transition-all tracking-wide"
+                            >
+                              Verificar Minhas Respostas!
+                            </button>
+                          ) : (
+                            <div className="p-3.5 rounded-xl border border-yellow-600/30 bg-yellow-950/30 text-center space-y-2">
+                              <span className="font-bold text-xs block text-yellow-400">
+                                {quizScore === quizQuestions.length 
+                                  ? "⭐️ Perfeito! Nota 10! Você é um Leitor VIP!" 
+                                  : `Você acertou ${quizScore} de ${quizQuestions.length} questões! Muito bem!`}
+                              </span>
+                              
+                              {quizScore === quizQuestions.length && (
+                                <div className="text-[10px] text-yellow-100 bg-[#d4af37]/25 p-2 rounded mx-auto uppercase font-mono tracking-widest mt-1">
+                                  Selo concedido: Guardião Júnior do Saber
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={handleQuizReset}
+                                className="text-[10px] font-mono text-yellow-500 flex items-center gap-1 mx-auto mt-2 hover:underline"
+                              >
+                                <RotateCcw size={12} /> Refazer Teste
+                              </button>
+                            </div>
+                          )}
                         </form>
-                      )}
+
+                      </div>
                     </div>
 
                   </div>
 
-                  {/* Right Column: Interaction knowledge test check game */}
-                  <div className="md:col-span-6 flex flex-col justify-between pt-4 md:pt-0 pl-0 md:pl-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2 text-[#d4af37] font-mono text-xs">
-                        <HelpCircle size={16} /> Teste do Conhecimento (Infantil)
-                      </div>
-                      <h3 className="font-serif text-base font-bold text-yellow-100">
-                        Será que você aprendeu com Toinho e Val?
+                  {/* CENTRO DE AÇÕES PREMIUM / UPSELL & SOCIAL HUB */}
+                  <div className="mt-10 pt-8 border-t border-yellow-700/20 space-y-6">
+                    <div className="text-center max-w-xl mx-auto">
+                      <Sparkles className="text-yellow-500 mx-auto mb-2" size={24} />
+                      <h3 className="font-serif text-xl md:text-2xl font-black text-[#d4af37]">
+                        Próximos Passos da Sua Jornada Extraordinária
                       </h3>
-                      <p className="text-[10px] text-neutral-500">Responda às questões rápidas para receber seu selo.</p>
+                      <p className="text-xs text-neutral-400 mt-1">
+                        Continue estimulando a inteligência, valores e a criatividade de seus filhos com os nossos recursos VIP.
+                      </p>
+                    </div>
 
-                      <form onSubmit={handleQuizSubmit} className="space-y-4 mt-4">
-                        {quizQuestions.map((question) => (
-                          <div key={question.id} className="space-y-1.5">
-                            <p className="text-xs font-medium text-yellow-300">
-                              {question.id}. {question.q}
-                            </p>
-                            <div className="space-y-1 text-xs">
-                              {question.options.map((opt) => {
-                                const isChecked = quizAnswers[question.id] === opt.value;
-                                return (
-                                  <label 
-                                    key={opt.value} 
-                                    className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-all border ${
-                                      isChecked 
-                                        ? "bg-yellow-500/10 border-yellow-500/50 text-yellow-200" 
-                                        : theme === "dark" 
-                                          ? "bg-neutral-950/40 border-neutral-800/40 hover:bg-neutral-800/30 text-neutral-300"
-                                          : "bg-stone-50 border-stone-200 hover:bg-stone-100 text-stone-700"
-                                    }`}
-                                  >
-                                    <input 
-                                      type="radio" 
-                                      name={`q-${question.id}`}
-                                      value={opt.value}
-                                      checked={isChecked}
-                                      disabled={quizSubmitted}
-                                      onChange={() => setQuizAnswers(prev => ({ ...prev, [question.id]: opt.value }))}
-                                      className="mt-0.5 border-yellow-700 text-yellow-500 focus:ring-yellow-500 shrink-0"
-                                    />
-                                    <span>{opt.label}</span>
-                                  </label>
-                                );
-                              })}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* CARD 1: Próximos Volumes */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
+                        theme === "dark" 
+                          ? "bg-neutral-900/60 border-neutral-800 hover:border-yellow-700/30" 
+                          : "bg-[#faf8f4] border-stone-200"
+                      }`}>
+                        <div>
+                          <span className="text-[9px] font-mono uppercase bg-[#d4af37]/20 text-[#d4af37] px-2 py-0.5 rounded-full font-black">
+                            Novidades
+                          </span>
+                          <h4 className="font-serif font-black text-base text-yellow-100 mt-2.5 mb-2">Próximos Volumes</h4>
+                          <p className="text-[11px] text-neutral-400 leading-relaxed mb-4">
+                            Sua jornada não termina aqui! Os próximos livros já estão em desenvolvimento para complementar o aprendizado:
+                          </p>
+                          <div className="space-y-2">
+                            <div className="p-2.5 rounded-lg bg-black/30 border border-neutral-800 text-left">
+                              <span className="text-[10px] font-mono text-yellow-500 font-bold block">VOLUME II (EM BREVE)</span>
+                              <span className="text-xs text-white font-bold block">O Mistério das Sete Estrelas</span>
+                              <span className="text-[10px] text-neutral-400">Foco em Disciplina e Resiliência</span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-black/30 border border-neutral-800 text-left">
+                              <span className="text-[10px] font-mono text-yellow-500 font-bold block">VOLUME III (EM BREVE)</span>
+                              <span className="text-xs text-white font-bold block">A Fonte dos Enigmas</span>
+                              <span className="text-[10px] text-neutral-400">Foco em Raciocínio Lógico e Curiosidade</span>
                             </div>
                           </div>
-                        ))}
+                        </div>
+                        <div className="mt-4 text-[10px] text-yellow-500 font-mono text-center">
+                          Avisaremos você por e-mail!
+                        </div>
+                      </div>
 
-                        {!quizSubmitted ? (
-                          <button
-                            type="submit"
-                            disabled={Object.keys(quizAnswers).length < quizQuestions.length}
-                            className="w-full bg-[#d4af37] hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-950 font-bold py-2 rounded text-xs transition-all tracking-wide"
-                          >
-                            Verificar Minhas Respostas!
-                          </button>
-                        ) : (
-                          <div className="p-3.5 rounded-xl border border-yellow-600/30 bg-yellow-950/30 text-center space-y-2">
-                            <span className="font-bold text-xs block text-yellow-400">
-                              {quizScore === quizQuestions.length 
-                                ? "⭐️ Perfeito! Nota 10! Você é um Leitor VIP!" 
-                                : `Você acertou ${quizScore} de ${quizQuestions.length} questões! Muito bem!`}
-                            </span>
-                            
-                            {quizScore === quizQuestions.length && (
-                              <div className="text-[10px] text-yellow-100 bg-[#d4af37]/25 p-2 rounded mx-auto uppercase font-mono tracking-widest mt-1">
-                                Selo concedido: Guardião Júnior do Saber
-                              </div>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={handleQuizReset}
-                              className="text-[10px] font-mono text-yellow-500 flex items-center gap-1 mx-auto mt-2 hover:underline"
-                            >
-                              <RotateCcw size={12} /> Refazer Teste
-                            </button>
+                      {/* CARD 2: Instagram do Autor */}
+                      <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
+                        theme === "dark" 
+                          ? "bg-neutral-900/60 border-neutral-800 hover:border-yellow-700/30" 
+                          : "bg-[#faf8f4] border-stone-200"
+                      }`}>
+                        <div>
+                          <span className="text-[9px] font-mono uppercase bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-black">
+                            Comunidade
+                          </span>
+                          <h4 className="font-serif font-black text-base text-indigo-300 mt-2.5 mb-2">Instagram Oficial</h4>
+                          <p className="text-[11px] text-neutral-400 leading-relaxed mb-4">
+                            Faça parte de nossa comunidade de pais e educadores! Compartilhe o progresso de seus pequenos leitores.
+                          </p>
+                          <div className="bg-gradient-to-tr from-indigo-900/20 to-purple-900/15 p-4 rounded-xl border border-indigo-500/20 text-center space-y-2">
+                            <span className="text-xs text-neutral-300 block">Siga para novidades, lives e materiais gratuitos exclusivos de pedagogia infantil:</span>
+                            <span className="font-mono text-sm text-indigo-300 font-black block">@gestormarketplace</span>
                           </div>
-                        )}
-                      </form>
+                        </div>
+                        <a 
+                          href="https://instagram.com/gestormarketplace" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="mt-4 w-full py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold font-sans text-center transition-all block flex items-center justify-center gap-1.5"
+                        >
+                          Siga Appsvips <ExternalLink size={12} />
+                        </a>
+                      </div>
 
+                      {/* CARD 3: Kit VIP Pedagógico (Upsell) */}
+                      <div className={`p-5 rounded-2xl border border-yellow-500/30 bg-gradient-to-b from-yellow-950/20 to-amber-950/15 flex flex-col justify-between shadow-lg shadow-yellow-950/5`}>
+                        <div>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[9px] font-mono uppercase bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-black animate-pulse">
+                              Acesso Vitalício
+                            </span>
+                            <span className="text-xs font-bold text-yellow-400">50% OFF</span>
+                          </div>
+                          <h4 className="font-serif font-black text-base text-[#d4af37] mt-1 mb-2">Upgrade VIP Completo</h4>
+                          <p className="text-[11px] text-neutral-300 leading-relaxed mb-3">
+                            Garanta o acervo pedagógico definitivo para impressão e estudos sem interrupções:
+                          </p>
+                          <ul className="text-[11px] text-neutral-300 space-y-1.5 text-left mb-4">
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
+                              <span>Ebook em PDF HD formatado para impressão (A4)</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
+                              <span>Todos os 19 Audiobooks Premium MP3 para download</span>
+                            </li>
+                            <li className="flex items-start gap-1.5">
+                              <CheckCircle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
+                              <span>Guia Pedagógico de Perguntas e Dinâmicas de Grupo</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div>
+                          <div className="text-center mb-3">
+                            <span className="text-[10px] text-neutral-400 line-through">De R$ 39,90</span>
+                            <span className="text-sm text-yellow-400 font-bold block">Por apenas R$ 19,90</span>
+                          </div>
+                          <a 
+                            href="https://hotmart.com" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="w-full py-2 bg-[#d4af37] hover:brightness-110 text-neutral-950 rounded-xl text-xs font-extrabold font-sans text-center transition-all block shadow-md shadow-yellow-950/30"
+                          >
+                            Adquirir Versão Completa (Hotmart)
+                          </a>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

@@ -6,6 +6,8 @@ export interface BookPage {
   paragraphs: string[];
   image?: string;
   imageAlt?: string;
+  imageContextual?: string;
+  imageContextualAlt?: string;
   audio?: string;
   type: "cover" | "copyright" | "dedication" | "preface" | "content" | "summary" | "conclusion";
   quote?: string;

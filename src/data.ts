@@ -92,6 +92,8 @@ export const bookPages: BookPage[] = [
       "Por outro lado, morava na colina vizinha a pequena Val, uma menina de tranças longas e negras, olhos atentos à cor do mel e um sorriso constante. Val carregava sempre um livro debaixo do braço como se fosse um escudo protetor contra o tédio. Para ela, cada página era um portal para uma aventura sem sair do lugar.",
       "Apesar das diferenças, os dois eram melhores amigos. Toinho ensinava Val a pescar e a equilibrar-se nos troncos de madeira, enquanto Val contava a Toinho as incríveis lendas escritas que descobria. Mas Toinho ainda não compreendia por que ela se esforçava tanto para ir à escola todos os dias."
     ],
+    image: "/images/village_seven_hills_1782477395367.jpg",
+    imageAlt: "O charmoso Povoado das Sete Colinas cercado por montanhas verdejantes cobertas por névoa suave",
     audio: "/audio/pagina5.mp3",
     type: "content"
   },
@@ -125,6 +127,8 @@ export const bookPages: BookPage[] = [
     quote: "Não seja uma pedra, que resiste e quebra. Seja o bambu, que se curva e perdura.",
     quoteAuthor: "A Sabedoria do Pai",
     highlights: ["A Grande Lição: Ser leal aos seus valiosos valores não significa ser rígido em suas ações cotidianas. Você pode adaptar-se aos ventos das circunstâncias sem perder sua essência de vista, como o sábio bambu na tempestade."],
+    imageContextual: "/images/oak_and_bamboo_1782165061029.jpg",
+    imageContextualAlt: "O bambu flexível curvando-se com humildade sob a força do vento",
     audio: "/audio/pagina7.mp3",
     type: "content"
   },
@@ -137,8 +141,10 @@ export const bookPages: BookPage[] = [
       "Na parte mais antiga do Povoado das Sete Colinas, existiam histórias misteriosas que passavam de geração em geração. Dizia-se que um antiquíssimo poço de pedras, localizado em um jardim secreto cercado por trepadeiras selvagens, escondia em seu fundo uma riqueza sem igual.",
       "Atraídos pela ganância, muitos homens e jovens aventureiros de outras terras já haviam escavado o chão ao redor do poço, quebrando rochas e revirando a terra úmida em busca de baús escondidos repletos de moedas de ouro reluzentes, safiras ou joias preciosas perdidas.",
       "No entanto, por mais que cavassem, ninguém jamais encontrou um único anel ou metal precioso. Frustrados, muitos consideravam a lenda do poço apenas uma mentira de pastores antigos.",
-      "Toinho, fascinado por essas lendas de piratas e riquezas, perguntou para sua mãe se ela sabia qual era o verdadeiro segredo que existia por trás daquele mistério secular do poço antigo."
+      "Toinho, fascinado por essas lendas de piratas e riquezas, perguntou para sua mãe se ela sabia qual era o verdadeiro segredo que existia por trás daquele misterério secular do poço antigo."
     ],
+    image: "/images/magical_well_1782165075523.jpg",
+    imageAlt: "O poço antigo cercado por trepadeiras selvagens no jardim secreto do vale",
     audio: "/audio/pagina8.mp3",
     type: "content"
   },
@@ -155,6 +161,8 @@ export const bookPages: BookPage[] = [
     ],
     image: "/images/magical_well_1782165075523.jpg",
     imageAlt: "Mãe carinhosa oferecendo água fresca do poço antigo de pedras ao seu filho pequeno em um belo jardim",
+    imageContextual: "/images/magical_well_1782165075523.jpg",
+    imageContextualAlt: "A pureza e frescor da água do poço antigo de pedras",
     highlights: [
       "Água Pura: O essencial absoluto para a vida, disponível gratuitamente todos os dias.",
       "Sol Nascente: A luz divina que nasce e afasta o frio da noite a cada novo amanhecer.",
@@ -174,6 +182,8 @@ export const bookPages: BookPage[] = [
       "Ela sorria contente, com os olhos brilhando enquanto lia de forma concentrada enquanto andava. Toinho a chamou e desabafou sobre a dificuldade que sentia em ir para a escola, dizendo que preferia mil vezes ficar brincando livre no campo.",
       "Val sentou-se ao lado dele. Com muita paciência e criatividade de amiga, resolveu lhe contar uma bela fábula visual que lera naquele mesmo dia, usando a seguinte metáfora."
     ],
+    image: "/images/glowing_lighthouse_book_1782477420970.jpg",
+    imageAlt: "Val lendo seu livro de capa dura ornamentada e reluzente",
     audio: "/audio/pagina10.mp3",
     type: "content"
   },
@@ -184,8 +194,8 @@ export const bookPages: BookPage[] = [
     subtitle: "O Farol da Sabedoria Humana",
     paragraphs: [
       "Val desenhou no chão um mar tempestuoso com um navio perdido. 'Imagine', disse ela com voz misteriosa, 'que a vida é como um oceano desconhecido e o conhecimento é o farol que fica no alto de uma montanha rochosa.'",
-      "Para acender esse grandioso farol e mantê-lo brilhando intensamente, o homem responsável precisa ter estudado muito, conhecendo os ventos, as engrenagens e as correntes. Se o guardião do farol se entregar à preguiça, a chama se apagará e os navios se chocarão contra os recifes na escuridão.",
-      "Ir à escola e estudar com dedicação é exatamente como acender o seu próprio farol interno. Se você escolhe não ir e não exercita sua inteligência, sua mente permanece na escuridão, e você corre o grande risco de perder-se no mar das escolhas futuras da vida.",
+      "Para acender esse grandioso farol e mantê-lo brilhando intensamente, o homem responsible precisa ter estudado muito, conhecendo os ventos, as engrenagens e as correntes. Se o guardião do farol se entregar à preguiça, a chama se apagará e os navios se chocarão contra os recifes na escuridão.",
+      "Ir à escola e estudar com dedicação é exatamente como acender o seu próprio farol interno. Se você escolhe não ir e não exercita sua inteligência, sua mente permanece na escuridão, e você corre o grande risco de perder-se no mar das escolhas futures da vida.",
       "A preguiça, Toinho, é como um vento forte e frio que tenta apagar sua luz a todo momento. Não deixe que o farol dos seus mais belos sonhos se apague por simples falta de estudo!"
     ],
     highlights: [
@@ -193,6 +203,8 @@ export const bookPages: BookPage[] = [
       "Acenda sua Própria Luz: Estudar nos ensina a decidir nosso próprio destino com responsabilidade.",
       "Vença o Vento: Cada livro aberto é uma noite a menos de escuridão em nossa mente."
     ],
+    imageContextual: "/images/glowing_lighthouse_book_1782477420970.jpg",
+    imageContextualAlt: "O farol de stardust no alto da montanha guiando navios perdidos",
     audio: "/audio/pagina11.mp3",
     type: "content"
   },
@@ -207,6 +219,8 @@ export const bookPages: BookPage[] = [
       "Val, sabendo do atraso do amigo, passou em sua janela e, percebendo que ele ainda não estava pronto, sentou-se na borda da cama e contou a história do Passarinho Sonolento.",
       "Esse passarinho vivia em uma floresta distante e odiava acordar com os primeiros raios de sol. Sempre dizia que a pressa era inimiga da perfeição e que dormir até mais tarde era seu privilégio natural."
     ],
+    image: "/images/sleepy_bird_1782477406615.jpg",
+    imageAlt: "O inverno frio no vilarejo e a tentação de ficar na cama quentinha",
     audio: "/audio/pagina12.mp3",
     type: "content"
   },
@@ -227,6 +241,8 @@ export const bookPages: BookPage[] = [
       { number: "3", title: "Frutas Secas", desc: "As melhores oportunidades se esgotam, restando as piores opções do mercado." },
       { number: "4", title: "Dificuldades", desc: "O caminho do crescimento pessoal torna-se árduo e solitário." }
     ],
+    imageContextual: "/images/sleepy_bird_1782477406615.jpg",
+    imageContextualAlt: "O passarinho sonolento comendo as frutas secas do atraso",
     audio: "/audio/pagina13.mp3",
     type: "content"
   },
@@ -238,9 +254,11 @@ export const bookPages: BookPage[] = [
     paragraphs: [
       "Apesar de estar acordando no horário e participando ativamente, Toinho começou a achar as lições de alfabetização e escrita complexas demais. Ele se queixava de que decorar letras e fonemas parecia uma tarefa sem sentido.",
       "'Por que preciso conectar essas pequenas formas rabiscadas no papel, Val? Isso não faz sentido nenhum para um garoto do campo', reclamava ele, jogando seu lápis sobre a carteira escolar.",
-      "Val olhou para o lápis de grafite e depois para o caderno de Toinho. Então pegou uma folha envelhecida de papel e desenhou de próprio punho um maravilhoso mapa geográfico de tesouro, cheio de símbolos misteriosos, montanhas e lagos.",
+      "Val olhou para o lápis de grafite e depois para o caderno de Toinho. Then pegou uma folha envelhecida de papel e desenhou de próprio punho um maravilhoso mapa geográfico de tesouro, cheio de símbolos misteriosos, montanhas e lagos.",
       "Ela explicou que, sem decifrar os segredos escritos do papel, Toinho nunca conseguiria desvendar o caminho correto de nenhum mapa, ficando irremediavelmente perdido diante dos mistérios do vasto mundo."
     ],
+    image: "/images/glowing_treasure_map_1782477432178.jpg",
+    imageAlt: "O maravilhoso mapa do tesouro desenhado por Val",
     audio: "/audio/pagina14.mp3",
     type: "content"
   },
@@ -260,6 +278,8 @@ export const bookPages: BookPage[] = [
       { number: "03", title: "Decifrar Códigos Sociais", desc: "O conhecimento das leis e das técnicas protege as vilas de abusos. A caneta sempre foi mais poderosa do que a espada armada." },
       { number: "04", title: "Escrever a Própria Lenda", desc: "Se você mesmo não souber escrever com maestria, nunca poderá contar sua real história ao mundo com suas próprias palavras." }
     ],
+    imageContextual: "/images/glowing_treasure_map_1782477432178.jpg",
+    imageContextualAlt: "O mapa envelhecido mostrando as direções cruciais e símbolos do destino",
     audio: "/audio/pagina15.mp3",
     type: "content"
   },
@@ -279,6 +299,8 @@ export const bookPages: BookPage[] = [
       "Matemática de Valor: Uso das finanças para proteger o sustento econômico da vila.",
       "Exemplo de Integridade: Um legado onde o lucro anda de mãos dadas com a honestidade."
     ],
+    image: "/images/legacy_val_toinho_1782477460824.jpg",
+    imageAlt: "Toinho como um próspero e querido comerciante local no Povoado das Sete Colinas",
     audio: "/audio/pagina16.mp3",
     type: "content"
   },
@@ -298,6 +320,8 @@ export const bookPages: BookPage[] = [
       "Previsão de Safras Científica: Uso de cálculos de estrelas e estações para colheitas abundantes.",
       "Inspiração para Novas Gerações: O conhecimento compartilhado como tesouro público indestrutível."
     ],
+    imageContextual: "/images/legacy_val_toinho_1782477460824.jpg",
+    imageContextualAlt: "Val, a primeira Guardiã da Sabedoria do povoado, estudando botânica e astronomia",
     audio: "/audio/pagina17.mp3",
     type: "content"
   },
